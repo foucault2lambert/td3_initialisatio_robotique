@@ -1,44 +1,38 @@
-clearvars
-load("dataGps.mat")
+% --- Correction de l'orientation des vecteurs ---
+Tcapt = Tcapt(:);
+Psip = Psip(:);
 
-Tgps = dataGps(:,1);
-Xgps = dataGps(:,2);
-Ygps = dataGps(:,3);
-Qgps = dataGps(:,4);
-DataOk = dataGps(:,5);
+% --- Recalcul du N_10s ---
+% 1. Trouver l'indice jusqu'à 10s (Tcapt est maintenant un vecteur colonne)
+% On cherche tous les indices où le temps est <= 10.
+Indices_10s = find(Tcapt <= 10);
 
-% Vérification de la fréquence d'acquisition GPS
-temp = diff(Tgps);
-temp(temp == 0) = [];
-f = numel(temp) / (max(Tgps) - min(Tgps));
+% 2. Le dernier indice de cette liste est notre N_10s
+if isempty(Indices_10s)
+    N_10s = 0;
+    warning('Aucune donnée de capteur n''est enregistrée avant ou à 10 secondes.');
+else
+    N_10s = Indices_10s(end);
+end
 
-% Déclaration des constantes
-Fgps = 10;             % Fréquence du GPS en Hz
-Tech = 0.02;           % Période d'acquisition (50 Hz)
-x(1) = 0;
-y(1) = 0;
-phi(1) = -2.18;
-x_b(1) = 0;
-y_b(1) = 0;
-phi_b(1) = -2.18;
+% Vérification après correction
+disp(['Nouvelle valeur de N_10s : ', num2str(N_10s)]);
 
-% Chargement du plan du circuit
-load Circuit_layout_map.mat
+% 3. Extraction et vérification du vecteur
+Psip_extract = Psip(1:N_10s);
+disp(['Taille du vecteur pour la moyenne (après correction) : ', num2str(length(Psip_extract))]);
 
-x1 = map_bd(:,1);  % Bord droit
-y1 = map_bd(:,2);
-x2 = map_bg(:,1);  % Bord gauche
-y2 = map_bg(:,2);
+% 4. Calcul du biais (maintenant que la taille est > 0)
+if N_10s > 0
+    Psip_biais = mean(Psip_extract);
+    disp(['Valeur du biais du gyromètre (rad/s) : ', num2str(Psip_biais)]);
+    
+    % Compensation
+    Psip_comp = Psip - Psip_biais;
 
-% === INTERPOLATION DE LA TRAJECTOIRE GPS ===
-% On enlève les doublons temporels
-[T_unique, idx_unique] = unique(Tgps, 'stable');
-X_unique = Xgps(idx_unique);
-Y_unique = Ygps(idx_unique);
-
-% On définit un temps régulier pour interpoler
-ti = linspace(min(T_unique), max(T_unique), 2000); % 2000 points réguliers
-
-% Interpolation linéaire (ou 'spline' pour plus de lissage)
-Xi = interp1(T_unique, X_unique, ti, 'spline');
-Yi = interp1(T_unique, Y_unique, ti, 'spline');
+    % ... Poursuivez avec le tracé ...
+else
+    % Gérer le cas où N_10s est 0 (par exemple, si le fichier est vide)
+    Psip_biais = 0;
+    Psip_comp = Psip;
+end
